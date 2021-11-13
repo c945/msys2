@@ -1,6 +1,13 @@
 #!/bin/sh
 
-RSYNC_OPTS="--partial --progress -avpz"
+if [ -n "$SSH_PSW" ]; then
+ echo $SSH_PSW
+ exit 0
+fi
+export SSH_ASKPASS=$0
+export DISPLAY=:0
+
+RSYNC_OPTS="--partial --progress -stats -avhH"
 
 if [ "$1" = "-h" ]; then
   cat <<EOF
@@ -17,7 +24,7 @@ if [ "$1" = "-n" ]; then NOEXEC=1; shift; fi
 CF_ID=$(cf app $1 --guid)
 if test $? -ne 0; then exit 1; fi
 
-CF_EP=$(cf curl v2/info|tr -d '",'|awk '/app_ssh_endpoint/ {print $2}') 
+CF_EP=$(cf curl /v2/info|tr -d '",'|awk '/app_ssh_endpoint/ {print $2}') 
 
 # echo $CF_ID
 # echo $CF_EP
@@ -27,15 +34,16 @@ SSH_HOST=`echo $CF_EP|cut -d : -f 1`
 SSH_USER="cf:${CF_ID}/0"
 
 SSH_PSW=`cf ssh-code`
+export SSH_PSW
 echo $SSH_PSW
 
 shift
-set `echo $* | sed -e "s/@/$SSH_HOST/"`
+set -- `echo $* | sed -e "s/@/$SSH_HOST/"`
 echo "rsync $RSYNC_OPTS -e \"ssh -p $SSH_PORT -o User=$SSH_USER\" $@"
 
 if [ -z "$NOEXEC" ]
 then
- sshpass -p $SSH_PSW rsync $RSYNC_OPTS -e "ssh -p $SSH_PORT -o User=$SSH_USER" $@
+ setsid rsync $RSYNC_OPTS -e "ssh -p $SSH_PORT -o User=$SSH_USER" $@
 else
  # sshpass -p $SSH_PSW rsync -avp -e "ssh -p $SSH_PORT -o User=$SSH_USER" $@
  :
